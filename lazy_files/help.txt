@@ -1,0 +1,14 @@
+|-------------------|
+|  WELCOME TO LAZY  |
+|-------------------|
+
+Pick one of the commands below to procede (no dashes). Enjoy your time : )
+
+ -help: print this help message
+ 
+ACCOUNT MANAGEMENT 
+ -new [name]: create a new account
+ -switch [name]: switch to another account
+
+ASSIGNING TASKS
+ -fish [location]: start fishing at a certain location.

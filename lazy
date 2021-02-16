@@ -1,0 +1,539 @@
+#!/bin/bash
+
+# CONSTANTS
+
+UPDATE_TIME=60 # seconds
+BIN="./lazy_files/"
+ACCOUNT=""
+
+
+determine_action(){
+	if [ $# -lt 1 ] || [ "$1" == "help" ]; then
+		cat "${BIN}help.txt"
+		return
+	fi
+	
+	load_account
+	
+	# load make accounts
+	if [ "$1" == "account" ]; then
+
+		manage_account "${@}"
+		return
+	fi
+	if [ -z "$ACCOUNT" ]; then
+		echo "Make or select an account before other actions using account new or account switch"
+		return
+	fi
+	
+	# actions 
+	if [ "$1" == "fish" ]; then
+		if [ "$2" == "help" ] || [ -z "$1" ]; then
+			$1 "help"
+		elif [ -n "$3" ] && [ "$3" == "help" ]; then
+			$1 $2 $3
+		else
+			set_task "$1" "$2"
+		fi
+	elif [ "$1" == "check" ]; then
+		check_task
+	elif [ "$1" == "inventory" ]; then
+		show_inventory "${@}"
+	elif [ "$1" == "stats" ]; then
+		show_stats "${@}"
+	else
+		echo "No task/action called $1 see help if you are uncertain. Sorry"
+	fi
+}
+
+# load the account saved in the general into the ACCOUNT variable
+load_account(){
+	get_value_from_file "current player" "general.txt"
+	ACCOUNT="${file_value}"
+}
+
+# manage accounts
+#	variables are dependant on action
+manage_account(){
+	if [ $# -lt 3 ]; then
+		echo "Expected at least 3 aguments for $2 got $#"
+		return
+	fi
+	if [ "$2" == "new" ]; then
+		new_account "$3"
+	elif [ "$2" == "switch" ]; then
+		switch_account "$3"
+	elif [ "$2" == "stats" ]; then
+		account_stats "$3"
+	else
+		echo "No action for $2."
+	fi
+}
+
+# create a new account given a name. If the name already exists aboard
+#	1. the name of the account
+new_account(){
+	if [ -d "${BIN}$1" ]; then
+		echo "Account $1 already exists. Cannot create account."
+		return
+	fi
+	if mkdir -p "${BIN}$1" ; then
+		touch "${BIN}$1/inventory.txt"
+		echo "fishing = 0" >> "${BIN}$1/levels.txt"
+		echo -e "last time stamp = $(date +%s)\nlast task = \nlocation task = " >> "${BIN}$1/general.txt"
+		echo "Succesfully created account $1"
+	else
+		echo "Account creation failed. No writing permission?"
+	fi
+}
+
+# Switch to an account given a name. If no account exists aboard
+#	1. the name of the account
+switch_account(){
+	if [ -d "${BIN}$1" ]; then
+		get_value_from_file "current player" "general.txt"
+		set_value_in_file "current player" "${ACCOUNT}" "$1" "general.txt"
+		echo "switched to account $1."
+	else
+		echo "No player named $1."
+	fi
+}
+
+# Stats for an account 
+account_stats(){
+	echo "Still working on it :)"
+}
+
+# STAT SHOW FUNCTIONS
+
+# show the levels of the player
+#	optional stats to print otherwise all of them are printed
+show_stats(){
+	local all_stats=("fishing")
+	if [ $# -gt 1 ]; then
+		echo "FILTERED LEVELS (${ACCOUNT}):"
+		for stat in "${@:2}"; do
+			show_level "$stat"
+		done
+	else
+		echo "LEVELS (${ACCOUNT}):"
+		for stat in "${all_stats[@]}"; do
+			show_level "$stat"
+		done
+	fi
+}
+
+# print the level 
+# 	1. The stat to print
+show_level(){
+	get_lvl "$1"
+	local next_level_xp
+	if [ "$level" -eq 100 ]; then
+		next_level_xp="MAX!!"
+		echo "  $stat lvl: $level (${next_level_xp})"
+	else
+		next_level_xp="$(echo "${xp_values[$level]}" - "${file_value}" | bc)"
+		echo "  $stat lvl: $level (${next_level_xp}xp until next lvl)"
+	fi
+}
+
+# transform xp into a concrete level
+#	1. integet to transform into level
+level=0
+
+#get the level for a certain skill by the name of the stat e.g fishing
+#	1. name of the stat
+get_lvl(){
+	get_value_from_file "${1}" "${ACCOUNT}/levels.txt"
+	if [ -n "$file_value" ]; then
+		exp_to_lvl "$file_value"
+	fi
+}
+
+# pre calculated values for formula 25 * log10(xp + 100) - 50
+xp_values=(10 21 32 45 59 74 91 109 130 152 176 202 232 264 299 337 379 425 476 531 592 659 732 813 901 997 1103 1219 1346 1485 1638 1806 1990 2191 2412 2655 2920 3212 3531 3882 4266 4687 5149 5655 6210 6819 7486 8218 9021 9900 10865 11923 13083 14355 15749 17279 18955 20793 22809 25019 27443 30100 33014 36208 39711 43552 47764 52381 57444 62996 69084 75758 83077 91102 99900 109548 120127 131726 144444 158390 173681 190447 208830 228987 251089 275323 301896 331032 362979 398008 436416 478531 524708 575340 630858 691731 758478 831664 911911 999901)
+exp_to_lvl(){
+	local lvl=0
+	for val in "${xp_values[@]}"; do
+		if [ $((val+0)) -gt $(($1+0)) ]; then
+			level=$lvl
+			return
+		fi
+		((lvl++))
+	done
+	level=100
+}
+
+# TASK MANAGEMENT FUNCTIONS
+
+# Set a task to perform with a location
+#	1. the name of the task
+#	2. the task location
+set_task(){
+	
+	local min_name="${1}_${2}_min_lvl"
+	local min_lvl="${!min_name}"
+	get_lvl "${1}ing"
+	
+	local array_name="$1_locations"
+	local location_array="$array_name[@]"
+	local location_array=("${!location_array}")
+
+	if [[ ! "${location_array[@]}" =~ "${2}" ]]; then
+		echo "No location $2 for task $1"
+		return
+	elif [ $(($min_lvl+0)) -gt $(($level+0)) ]; then
+		echo "Minum required ${1}ing level for fishing at the ${2} is $min_lvl you are $level. Keep training..."
+		return
+	fi
+	
+	echo "Stopping current action..."
+	check_task
+	echo ""
+	
+	get_value_from_file "last task" "${ACCOUNT}/general.txt"
+	set_value_in_file "last task" "${file_value}" "$1" "${ACCOUNT}/general.txt"
+	
+	get_value_from_file "location task" "${ACCOUNT}/general.txt"
+	set_value_in_file "location task" "${file_value}" "$2" "${ACCOUNT}/general.txt"
+	
+	echo "Started fishing at the $2"
+}
+
+# Run the simulate task function with the safety of checking if a task is currently running or not
+# this function is for notifying the user what happened
+check_task(){
+	get_value_from_file "last task" "${ACCOUNT}/general.txt"
+	if [ -z "$file_value" ]; then
+		return
+	fi
+	local task_name="$file_value"
+
+	get_value_from_file "location task" "${ACCOUNT}/general.txt"
+	if [ -z "$file_value" ]; then
+		return
+	fi
+	local task_location="$file_value"
+	
+	get_lvl "${task_name}ing"
+	local current_lvl="$level"
+	simulate_action $task_name $task_location
+	
+	get_lvl "${task_name}ing"
+	if [ ! $(($current_lvl+0)) -eq $(($level+0)) ]; then
+		echo "${ACCOUNT} ${task_name}ing level went from $current_lvl to $level."
+	fi
+}
+
+# simulate an action for the time that the player has performed the action
+#	1. name of task
+#	2. location of task
+simulate_action(){
+	local task_name="$1"
+	local task_location="$2"
+	
+	get_value_from_file "last time stamp" "${ACCOUNT}/general.txt"
+	local current_time
+	current_time="$(date +%s)"
+	set_value_in_file "last time stamp" "$file_value" "$current_time" "${ACCOUNT}/general.txt"
+	local elapsed_seconds=$(($((current_time+0))-$((file_value+0))))
+	elapsed_seconds=$(($elapsed_seconds+5000))
+	get_elapsed_time "${elapsed_seconds}"
+	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time. Now for the spoils:"
+	
+	$task_name $task_location $elapsed_seconds
+	
+	local index=0
+	local array_name="${task_name}_${task_location}_array"
+	local array="$array_name[@]"
+	local array=("${!array}")
+	local got_item=false
+	
+	# put all collected items in inventory
+	for element in "${simulation_result[@]}"; do
+		if [ $((element)) -gt 0 ]; then
+			add_item_in_inventory "${array[index]}" "${element}"
+			echo "  ${ACCOUNT} collected ${element} ${array[index]}!"
+			got_item=true
+		fi
+		((index++))
+	done
+	if [ "$got_item" == false ]; then
+		echo "  ${ACCOUNT} collected nothing lol"
+		return
+	fi
+	#save the xp
+	get_value_from_file "${task_name}ing" "${ACCOUNT}/levels.txt"
+	local new_total=$(($((file_value+0))+$((exp_gained))))
+	set_value_in_file "${task_name}ing" "$file_value" "$new_total" "${ACCOUNT}/levels.txt"
+	echo "${ACCOUNT} gained $exp_gained ${task_name}ing XP."
+}
+
+# Show the inventory 
+show_inventory(){
+	if [ $# -gt 1 ]; then
+		echo "FILTERED INVENTORY (${ACCOUNT}):"
+		for item in "${@:2}"; do
+			get_value_from_file "$item" "${ACCOUNT}/inventory.txt"
+			if [ -n "$file_value" ]; then
+				echo "  $item: $file_value"
+			fi
+		done
+	else
+		echo "INVENTORY (${ACCOUNT}):"
+		local index=1
+		while IFS= read -r line; do
+			echo "  $index. $line"
+			((index++))
+		done < "${BIN}${ACCOUNT}/inventory.txt"
+	fi
+}
+
+
+# SIMULATION FUCNTIONS
+
+#simulation globals
+lvl_array=""
+xp_array=""
+wheigth_array=""
+
+exp_gained=0
+simulation_result=""
+
+
+# Simulate a fish catch attempt
+#	1. the area to fish in
+#	2. number of seconds to simulate 
+fish_lake_array=(can shrimp boot log "golden shrimp")
+fish_river_array=(algea "silver bowl" trout salmon sturgeon eel)
+fish_sea_array=(lobster octopus septopus bottle "angler fish")
+fish_ocean_array=("wooden barrel" "yelly fish" tuna shark "manta ray" whale)
+fish_locations=(lake river sea ocean)
+fish_lake_min_lvl=0
+fish_river_min_lvl=10
+fish(){
+	local base_speed
+	get_lvl "fishing"
+	if [ "$1" == "help" ]; then
+		echo "Fishing is a skill for collecting fish (who knew). The following locations are available:"
+		all_location_help "fish"
+		return
+	elif [ "$1" == "lake" ]; then
+		lvl_array=(0 0 3 10 20)
+		xp_array=(1 5 1 1 15)
+		wheigth_array=(10 25 35 40 41)
+		simulation_result=(0 0 0 0 0)
+		base_speed=$((120-$(($level+0))*2))
+	elif [ "$1" == "river" ]; then
+		lvl_array=(10 10 20 30 35 50)
+		xp_array=(5 500 20 30 32 40)
+		wheigth_array=(100 101 251 351 451 501)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=200
+	elif [ "$1" == "sea" ]; then
+		lvl_array=(5 5 10 15 15 25)
+		xp_array=(5 500 20 30 32 40)
+		wheigth_array=(100 101 251 351 451 501)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=200
+	elif [ "$1" == "ocean" ]; then
+		$1
+	else
+		echo "There is no location $1 to fish at."
+		all_location_help "fish"
+		return
+	fi
+	
+	if [ "$2" == "help" ]; then
+		specific_location_help "fish" "$1"
+	else
+		# reduce speed based on lvl
+		run_action_simulation "fishing" "$2" "$base_speed"
+	fi
+}
+
+# print a help message for all locations of an action
+#	1. the action
+all_location_help(){
+	local locations_array_name="${1}_locations"
+	local loc_array="$locations_array_name[@]"
+	local loc_array=("${!loc_array}")
+	for loc in "${loc_array[@]}"; do
+		echo " -${loc}"
+	done
+	echo "For detailed information of a location type 'lazy ${1} location_name help'"
+}
+
+#print a help for a specific location
+#	1. the action of the location
+#	2. the location
+specific_location_help(){
+	local array_name="${1}_${2}_array"
+	local array="$array_name[@]"
+	local array=("${!array}")
+	
+	local total_wheigth="${wheigth_array[${#wheigth_array[@]} - 1]}"
+	local prev_wheigth=0
+	local cur_wheigth=0
+	local perc_chance=0
+	
+	echo "Resources gatherable at $2:"
+	local index=0
+	for resource in "${array[@]}"; do
+		let cur_wheigth="${wheigth_array[index]}-${prev_wheigth}"
+		prev_wheigth="${wheigth_array[index]}"
+		perc_chance="$(echo "scale=4; (${cur_wheigth} / ${total_wheigth}) * 100" | bc)"
+		echo " - ${resource}: (${perc_chance}% chance) gatherable from level ${lvl_array[index]} giving ${xp_array[index]}xp"
+		((index++))
+	done
+}
+
+# Run the simulation for a certain action. This function relies on the action setting some globals first.
+#	1. the skill name of the action
+#	2. repetition of the action
+#	3. base likelyhood to sucesfully perform an action
+# results are stored in exp_gained and simulation_result
+run_action_simulation(){
+	get_value_from_file "$1" "${ACCOUNT}/levels.txt"
+	local starting_exp="$file_value"
+	exp_to_lvl $(($starting_exp+$exp_gained))
+	local base_speed=$(($3+0))
+	local speed=$(($base_speed - $level * 2))
+
+	local seconds=$(($2+0))
+
+	while [ $seconds -gt 0 ]
+	do
+		local catch_roll=$((1 + RANDOM % $speed))
+		if  [ "$catch_roll" -eq 1 ]; then
+			exp_to_lvl $(($starting_exp+$exp_gained))
+			speed=$(($base_speed - $level * 2))
+			if [ $speed -lt 10 ]; then
+				speed=10
+			fi
+			get_max_arry_index "$level" "${lvl_array[@]}"
+
+			wheighted_roll "${wheigth_array[$max_index]}" "${wheigth_array[@]}" 
+			((simulation_result[wheighted_index]++))
+			exp_gained=$((exp_gained+xp_array[wheighted_index]))
+		fi
+		((seconds--))
+	done
+}
+
+# Get the index in a lvl array that contains all levels below the given level
+#	1. level
+#	2. level array
+max_index=0
+get_max_arry_index(){
+	local array=("${@:2}")
+	
+	local index=0
+	for lvl in "${array[@]}"; do
+		if [ $(($lvl)) -gt $(($1)) ]; then
+			max_index=index
+			return
+		fi
+		((index++))
+	done
+	max_index=$((--index))
+}
+
+
+# return an index based on a wheighted input array
+#	1. wheight array
+#	2. total wheight
+wheighted_index=0
+wheighted_roll(){
+	local wheigth_array=("${@:2}")
+	local random_number=$((1 + RANDOM % $(($1+0))))
+	index=0
+	for element in "${wheigth_array[@]}"; do
+		if [ "${random_number}" -lt "${element}" ]; then
+			wheighted_index="$index"
+			break
+		fi
+		((index++))
+	done
+}
+
+
+#FILE MANINPULATIONS
+
+# get a value from a file and save into file_value
+#	1. value name
+#	2. name of file
+file_value=""
+get_value_from_file(){
+	if ! grep -q "^$1" "${BIN}$2"; then
+		file_value=""
+	else
+		local sed_line="s/^${1} = //"
+		file_value="$(grep "^$1" ${BIN}"$2" | sed "$sed_line")"
+	fi
+}
+
+# set a value in a file
+#	1. value name
+#	2. original_value
+#	3. new_value
+#	4. name of file
+set_value_in_file(){
+	local sed_line="s/^${1} = ${2}/${1} = ${3}/"
+	sed -i "$sed_line" "${BIN}$4"
+}
+
+# add a value to the end of a file
+#	1. the value
+# 	2. name of file
+add_value_in_file(){
+	echo "$1" >> "${BIN}$2"
+}
+
+# add an item with a quantity to the inventory file
+#	1. the item name
+#	2. the item quantity (can be negative)
+add_item_in_inventory(){
+	get_value_from_file "$1" "${ACCOUNT}/inventory.txt"
+	if [ -z "$file_value" ]; then
+		local entry="$1 = $2"
+		add_value_in_file "$entry" "${ACCOUNT}/inventory.txt"
+	else
+		set_value_in_file "$1" "$file_value" $(($(("$file_value"+0))+$(("$2"+0)))) "${ACCOUNT}/inventory.txt"
+	fi
+}
+
+
+#UTILITY
+
+# convert seconds into days hours minutes seconds --> https://stackoverflow.com/questions/12199631/convert-seconds-to-hours-minutes-seconds
+#	1. time in seconds
+
+elapsed_time=""
+function get_elapsed_time() {
+    num=$1
+    min=0
+    hour=0
+    day=0
+    if((num>59));then
+        ((sec=num%60))
+        ((num=num/60))
+        if((num>59));then
+            ((min=num%60))
+            ((num=num/60))
+            if((num>23));then
+                ((hour=num%24))
+                ((day=num/24))
+            else
+                ((hour=num))
+            fi
+        else
+            ((min=num))
+        fi
+    else
+        ((sec=num))
+    fi
+    elapsed_time="${day}d ${hour}h ${min}m ${sec}s"
+}
+
+determine_action "${@}"
