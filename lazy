@@ -237,7 +237,6 @@ simulate_action(){
 	current_time="$(date +%s)"
 	set_value_in_file "last time stamp" "$file_value" "$current_time" "${ACCOUNT}/general.txt"
 	local elapsed_seconds=$(($((current_time+0))-$((file_value+0))))
-	elapsed_seconds=$(($elapsed_seconds+5000))
 	get_elapsed_time "${elapsed_seconds}"
 	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time. Now for the spoils:"
 	
