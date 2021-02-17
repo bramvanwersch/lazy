@@ -28,7 +28,7 @@ determine_action(){
 	
 	# actions 
 	if [ "$1" == "fish" ] || [ "$1" == "woodcut" ]; then
-		if [ "$2" == "help" ] || [ -z "$1" ]; then
+		if [ "$2" == "help" ] || [ -z "$2" ]; then
 			$1 "help"
 		elif [ -n "$3" ] && [ "$3" == "help" ]; then
 			$1 $2 $3
@@ -79,7 +79,7 @@ new_account(){
 	fi
 	if mkdir -p "${BIN}$1" ; then
 		touch "${BIN}$1/inventory.txt"
-		echo "fishing = 0" >> "${BIN}$1/levels.txt"
+		echo -e "fishing = 0\nwoodcutting = 0" >> "${BIN}$1/levels.txt"
 		echo -e "last time stamp = $(date +%s)\nlast task = \nlocation task = " >> "${BIN}$1/general.txt"
 		echo "Succesfully created account $1"
 	else
@@ -109,7 +109,7 @@ account_stats(){
 # show the levels of the player
 #	optional stats to print otherwise all of them are printed
 show_stats(){
-	local all_stats=("fishing")
+	local all_stats=("fishing" "woodcuting")
 	if [ $# -gt 1 ]; then
 		echo "FILTERED LEVELS (${ACCOUNT}):"
 		for stat in "${@:2}"; do
@@ -183,7 +183,7 @@ set_task(){
 		echo "No location $2 for task $1"
 		return
 	elif [ $(($min_lvl+0)) -gt $(($level+0)) ]; then
-		echo "Minum required ${1}ing level for fishing at the ${2} is $min_lvl you are $level. Keep training..."
+		echo "Minum required ${1}ing level for ${1}ing at the ${2} is $min_lvl you are $level. Keep training..."
 		return
 	fi
 	
@@ -197,7 +197,7 @@ set_task(){
 	get_value_from_file "location task" "${ACCOUNT}/general.txt"
 	set_value_in_file "location task" "${file_value}" "$2" "${ACCOUNT}/general.txt"
 	
-	echo "Started fishing at the $2"
+	echo "Started ${1}ing at the $2"
 }
 
 # Run the simulate task function with the safety of checking if a task is currently running or not
@@ -303,7 +303,7 @@ simulation_result=""
 # Simulate a fish catch attempt
 #	1. the area to fish in
 #	2. number of seconds to simulate 
-fish_lake_array=(can shrimp boot log "golden shrimp" logness)
+fish_lake_array=(can shrimp boot "wet mystery log" "golden shrimp" logness)
 fish_lake_min_lvl=0
 
 fish_river_array=(algea "silver bowl" trout salmon sturgeon eel)
@@ -370,45 +370,47 @@ fish(){
 	fi
 }
 
+# Simulate a woodcut attempt
+#	1. the area to woodcut in
+#	2. number of seconds to simulate 
+woodcut_forest_array=("small branch" "bark" "birdsnest" "birch log" "oak log" "ash log" "maple log" "maple sap")
+woodcut_forest_min_lvl=0
 
-woodcut_locations=(forest darkforest highwoods bambooforest)
+woodcut_darkforest_array=("willow log" "flexible branch" "swamp goo" "bone" "black cherry tree" "rotten cherry" "cherry" "elm log")
+woodcut_forest_min_lvl=15
+
+woodcut_locations=(forest darkforest highwoods magicforest)
 woodcut(){
 	local base_speed
-	get_lvl "fishing"
+	get_lvl "woodcuting"
 	if [ "$1" == "help" ]; then
-		echo "Fishing is a skill for collecting fish (who knew). The following locations are available:"
-		all_location_help "fish"
+		echo "Woodcutting is a skill where you chop and collect wood (WAUW). The following locations are available:"
+		all_location_help "woodcut"
 		return
-	elif [ "$1" == "lake" ]; then
-		lvl_array=(0 0 3 10 20 90)
-		xp_array=(1 5 1 1 15 5000)
-		wheigth_array=(10000 25000 35000 40000 41000 41001)
-		simulation_result=(0 0 0 0 0 0)
+	elif [ "$1" == "forest" ]; then
+		lvl_array=(0 0 0 5 10 18 25 25)
+		xp_array=(1 5 7 5 10 15 20 10)
+		wheigth_array=(20 30 31 51 61 66 70 72)
+		simulation_result=(0 0 0 0 0 0 0 0)
 		base_speed=120
-	elif [ "$1" == "river" ]; then
-		lvl_array=(10 10 20 30 35 50)
-		xp_array=(5 500 20 30 32 40)
-		wheigth_array=(100 101 251 351 451 501)
-		simulation_result=(0 0 0 0 0 0)
-		base_speed=200
-	elif [ "$1" == "sea" ]; then
+	elif [ "$1" == "darkforest" ]; then
+		lvl_array=(15 15 25 25 35 35 36 45)
+		xp_array=(20 8 30 30 45 1 50 60)
+		wheigth_array=(20 40 45 46 60 65 66 70)
+		simulation_result=(0 0 0 0 0 0 0 0)
+		base_speed=300
+	elif [ "$1" == "highwoods" ]; then
 		lvl_array=(35 35 45 50 60 65 65)
 		xp_array=(35 15 40 50 777 70 70)
 		wheigth_array=(100 200 400 450 453 503 528)
 		simulation_result=(0 0 0 0 0 0 0)
 		base_speed=350
-	elif [ "$1" == "ocean" ]; then
+	elif [ "$1" == "bambooforest" ]; then
 		lvl_array=(45 50 60 70 80 85)
 		xp_array=(10 55 65 80 100 120)
 		wheigth_array=(20 40 50 55 60 62)
 		simulation_result=(0 0 0 0 0 0)
 		base_speed=420
-	elif [ "$1" == "deapsea" ]; then
-		lvl_array=(75 80 85 90 99)
-		xp_array=(90 120 150 180 300)
-		wheigth_array=(100 200 300 400 405)
-		simulation_result=(0 0 0 0 0)
-		base_speed=500
 	else
 		echo "There is no location $1 to fish at."
 		all_location_help "fish"
