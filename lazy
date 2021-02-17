@@ -27,7 +27,7 @@ determine_action(){
 	fi
 	
 	# actions 
-	if [ "$1" == "fish" ]; then
+	if [ "$1" == "fish" ] || [ "$1" == "woodcut" ]; then
 		if [ "$2" == "help" ] || [ -z "$1" ]; then
 			$1 "help"
 		elif [ -n "$3" ] && [ "$3" == "help" ]; then
@@ -238,7 +238,7 @@ simulate_action(){
 	set_value_in_file "last time stamp" "$file_value" "$current_time" "${ACCOUNT}/general.txt"
 	local elapsed_seconds=$(($((current_time+0))-$((file_value+0))))
 	get_elapsed_time "${elapsed_seconds}"
-	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time. Now for the spoils:"
+	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time at the $task_location. Now for the spoils:"
 	
 	$task_name $task_location $elapsed_seconds
 	
@@ -303,13 +303,22 @@ simulation_result=""
 # Simulate a fish catch attempt
 #	1. the area to fish in
 #	2. number of seconds to simulate 
-fish_lake_array=(can shrimp boot log "golden shrimp")
-fish_river_array=(algea "silver bowl" trout salmon sturgeon eel)
-fish_sea_array=(lobster octopus septopus bottle "angler fish")
-fish_ocean_array=("wooden barrel" "yelly fish" tuna shark "manta ray" whale)
-fish_locations=(lake river sea ocean)
+fish_lake_array=(can shrimp boot log "golden shrimp" logness)
 fish_lake_min_lvl=0
+
+fish_river_array=(algea "silver bowl" trout salmon sturgeon eel)
 fish_river_min_lvl=10
+
+fish_sea_array=(lobster bottle cod octopus septopus swordfish "sea turtle")
+fish_sea_min_lvl=35
+
+fish_ocean_array=(shell "yelly fish" tuna shark "manta ray" whale)
+fish_ocean_min_lvl=30
+
+fish_deapsea_array=(toothfish viperfish anglerfish megladon treasure)
+fish_deapsea_min_lvl=75
+
+fish_locations=(lake river sea ocean deapsea)
 fish(){
 	local base_speed
 	get_lvl "fishing"
@@ -318,11 +327,11 @@ fish(){
 		all_location_help "fish"
 		return
 	elif [ "$1" == "lake" ]; then
-		lvl_array=(0 0 3 10 20)
-		xp_array=(1 5 1 1 15)
-		wheigth_array=(10 25 35 40 41)
-		simulation_result=(0 0 0 0 0)
-		base_speed=$((120-$(($level+0))*2))
+		lvl_array=(0 0 3 10 20 90)
+		xp_array=(1 5 1 1 15 5000)
+		wheigth_array=(10000 25000 35000 40000 41000 41001)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=120
 	elif [ "$1" == "river" ]; then
 		lvl_array=(10 10 20 30 35 50)
 		xp_array=(5 500 20 30 32 40)
@@ -330,13 +339,23 @@ fish(){
 		simulation_result=(0 0 0 0 0 0)
 		base_speed=200
 	elif [ "$1" == "sea" ]; then
-		lvl_array=(5 5 10 15 15 25)
-		xp_array=(5 500 20 30 32 40)
-		wheigth_array=(100 101 251 351 451 501)
-		simulation_result=(0 0 0 0 0 0)
-		base_speed=200
+		lvl_array=(35 35 45 50 60 65 65)
+		xp_array=(35 15 40 50 777 70 70)
+		wheigth_array=(100 200 400 450 453 503 528)
+		simulation_result=(0 0 0 0 0 0 0)
+		base_speed=350
 	elif [ "$1" == "ocean" ]; then
-		$1
+		lvl_array=(45 50 60 70 80 85)
+		xp_array=(10 55 65 80 100 120)
+		wheigth_array=(20 40 50 55 60 62)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=420
+	elif [ "$1" == "deapsea" ]; then
+		lvl_array=(75 80 85 90 99)
+		xp_array=(90 120 150 180 300)
+		wheigth_array=(100 200 300 400 405)
+		simulation_result=(0 0 0 0 0)
+		base_speed=500
 	else
 		echo "There is no location $1 to fish at."
 		all_location_help "fish"
@@ -351,6 +370,59 @@ fish(){
 	fi
 }
 
+
+woodcut_locations=(forest darkforest highwoods bambooforest)
+woodcut(){
+	local base_speed
+	get_lvl "fishing"
+	if [ "$1" == "help" ]; then
+		echo "Fishing is a skill for collecting fish (who knew). The following locations are available:"
+		all_location_help "fish"
+		return
+	elif [ "$1" == "lake" ]; then
+		lvl_array=(0 0 3 10 20 90)
+		xp_array=(1 5 1 1 15 5000)
+		wheigth_array=(10000 25000 35000 40000 41000 41001)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=120
+	elif [ "$1" == "river" ]; then
+		lvl_array=(10 10 20 30 35 50)
+		xp_array=(5 500 20 30 32 40)
+		wheigth_array=(100 101 251 351 451 501)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=200
+	elif [ "$1" == "sea" ]; then
+		lvl_array=(35 35 45 50 60 65 65)
+		xp_array=(35 15 40 50 777 70 70)
+		wheigth_array=(100 200 400 450 453 503 528)
+		simulation_result=(0 0 0 0 0 0 0)
+		base_speed=350
+	elif [ "$1" == "ocean" ]; then
+		lvl_array=(45 50 60 70 80 85)
+		xp_array=(10 55 65 80 100 120)
+		wheigth_array=(20 40 50 55 60 62)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=420
+	elif [ "$1" == "deapsea" ]; then
+		lvl_array=(75 80 85 90 99)
+		xp_array=(90 120 150 180 300)
+		wheigth_array=(100 200 300 400 405)
+		simulation_result=(0 0 0 0 0)
+		base_speed=500
+	else
+		echo "There is no location $1 to fish at."
+		all_location_help "fish"
+		return
+	fi
+	
+	if [ "$2" == "help" ]; then
+		specific_location_help "woodcut" "$1"
+	else
+		# reduce speed based on lvl
+		run_action_simulation "woodcuting" "$2" "$base_speed"
+	fi
+}
+
 # print a help message for all locations of an action
 #	1. the action
 all_location_help(){
@@ -358,7 +430,9 @@ all_location_help(){
 	local loc_array="$locations_array_name[@]"
 	local loc_array=("${!loc_array}")
 	for loc in "${loc_array[@]}"; do
-		echo " -${loc}"
+		local min_location_name="${1}_${loc}_min_lvl"
+		local min_lvl="${!min_location_name}"
+		echo " -${loc} from lvl $min_lvl"
 	done
 	echo "For detailed information of a location type 'lazy ${1} location_name help'"
 }
