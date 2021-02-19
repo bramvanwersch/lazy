@@ -237,9 +237,9 @@ simulate_action(){
 	current_time="$(date +%s)"
 	set_value_in_file "last time stamp" "$file_value" "$current_time" "${ACCOUNT}/general.txt"
 	local elapsed_seconds=$(($((current_time+0))-$((file_value+0))))
-	((elapsed_seconds+=5000))
+	elapsed_seconds=$(($elapsed_seconds+5000))
 	get_elapsed_time "${elapsed_seconds}"
-	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time at the $task_location. Now for the spoils:"
+	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time. Now for the spoils:"
 	
 	$task_name $task_location $elapsed_seconds
 	
@@ -290,7 +290,7 @@ show_inventory(){
 }
 
 
-# SIMULATION FUCNTIONS
+# SIMULATION FUCNTIONS never go above 32767 with wheights
 
 #simulation globals
 lvl_array=""
@@ -330,7 +330,7 @@ fish(){
 	elif [ "$1" == "lake" ]; then
 		lvl_array=(0 0 3 10 20 90)
 		xp_array=(1 5 1 1 15 5000)
-		wheigth_array=(10000 25000 35000 40000 41000 41001)
+		wheigth_array=(8000 20000 30000 32000 32500 32501)
 		simulation_result=(0 0 0 0 0 0)
 		base_speed=120
 	elif [ "$1" == "river" ]; then
@@ -370,7 +370,6 @@ fish(){
 		run_action_simulation "fishing" "$2" "$base_speed"
 	fi
 }
-
 # Simulate a woodcut attempt
 #	1. the area to woodcut in
 #	2. number of seconds to simulate 
@@ -493,9 +492,10 @@ run_action_simulation(){
 			if [ $speed -lt 10 ]; then
 				speed=10
 			fi
-			get_max_arry_index "$level" "${lvl_array[@]}"
-
-			wheighted_roll "${wheigth_array[$max_index]}" "${wheigth_array[@]}" 
+			max_index="$(get_max_arry_index "$level" "${lvl_array[@]}")"
+			
+			wheighted_index="$(wheighted_roll "${wheigth_array[$max_index]}" "${wheigth_array[@]}")"
+			local random_number=$((1 + RANDOM % $(("${wheigth_array[$max_index]}"))))
 			((simulation_result[wheighted_index]++))
 			exp_gained=$((exp_gained+xp_array[wheighted_index]))
 		fi
@@ -503,40 +503,42 @@ run_action_simulation(){
 	done
 }
 
-# Get the index in a lvl array that contains all levels below the given level
+# Get the index in a lvl array that contains all levels below the given level 
+# 	NOTE: the provided level should never be below the minimum required level
 #	1. level
 #	2. level array
-max_index=0
 get_max_arry_index(){
 	local array=("${@:2}")
-	
-	local index=0
-	for lvl in "${array[@]}"; do
-		if [ $(($lvl)) -gt $(($1)) ]; then
-			max_index="$index"
+	local i=0
+	local prev_value=0
+	for i in "${!array[@]}"; do
+		if (($1 >= $prev_value && "${array[$i]}" > $1)); then
+			((i--))
+			echo "$i"
 			return
 		fi
-		((index++))
+		prev_value="${array[$i]}"
 	done
-	max_index=$((--index))
+	echo "$i"
 }
 
-
 # return an index based on a wheighted input array
-#	1. wheight array
-#	2. total wheight
-wheighted_index=0
+#	1. total wheight
+#	2. wheight array
 wheighted_roll(){
-	local wheigth_array=("${@:2}")
-	local random_number=$((1 + RANDOM % $(($1+0))))
-	index=0
-	for element in "${wheigth_array[@]}"; do
-		if [ "${random_number}" -lt "${element}" ]; then
-			wheighted_index="$index"
-			break
+	local array=("${@:2}")
+	local random_number=$((1 + RANDOM % $(($1))))
+	local i=0
+	local prev_value=0
+	for i in "${!array[@]}"; do
+		if (($random_number >= $prev_value && "${array[$i]}" >= $random_number)); then
+			echo "$i"
+			return
 		fi
-		((index++))
+		prev_value="${array[$i]}"
+
 	done
+	echo "$i"
 }
 
 
