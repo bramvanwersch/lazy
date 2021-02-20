@@ -48,8 +48,7 @@ determine_action(){
 
 # load the account saved in the general into the ACCOUNT variable
 load_account(){
-	get_value_from_file "current player" "general.txt"
-	ACCOUNT="${file_value}"
+	ACCOUNT="$(get_value_from_file "current player" "general.txt")"
 }
 
 # manage accounts
@@ -91,7 +90,6 @@ new_account(){
 #	1. the name of the account
 switch_account(){
 	if [ -d "${BIN}$1" ]; then
-		get_value_from_file "current player" "general.txt"
 		set_value_in_file "current player" "${ACCOUNT}" "$1" "general.txt"
 		echo "switched to account $1."
 	else
@@ -126,28 +124,28 @@ show_stats(){
 # print the level 
 # 	1. The stat to print
 show_level(){
-	get_lvl "$1"
+	local exp="$(get_value_from_file "${1}" "${ACCOUNT}/levels.txt")"
+	local level="$(exp_to_lvl "$exp")"
 	local next_level_xp
 	if [ "$level" -eq 100 ]; then
 		next_level_xp="MAX!!"
 		echo "  $stat lvl: $level (${next_level_xp})"
 	else
-		next_level_xp="$(echo "${xp_values[$level]}" - "${file_value}" | bc)"
+		next_level_xp="$(echo "${xp_values[$level]}" - "${exp}" | bc)"
 		echo "  $stat lvl: $level (${next_level_xp}xp until next lvl)"
 	fi
 }
 
-# transform xp into a concrete level
-#	1. integet to transform into level
-level=0
 
 #get the level for a certain skill by the name of the stat e.g fishing
 #	1. name of the stat
 get_lvl(){
-	get_value_from_file "${1}" "${ACCOUNT}/levels.txt"
-	if [ -n "$file_value" ]; then
-		exp_to_lvl "$file_value"
+	local exp="$(get_value_from_file "${1}" "${ACCOUNT}/levels.txt")"
+	local lvl=""
+	if [ -n "$exp" ]; then
+		lvl="$(exp_to_lvl "$exp")"
 	fi
+	echo "$lvl"
 }
 
 # pre calculated values for formula 25 * log10(xp + 100) - 50
@@ -156,12 +154,12 @@ exp_to_lvl(){
 	local lvl=0
 	for val in "${xp_values[@]}"; do
 		if [ $((val+0)) -gt $(($1+0)) ]; then
-			level=$lvl
+			echo $lvl
 			return
 		fi
 		((lvl++))
 	done
-	level=100
+	echo 100
 }
 
 # TASK MANAGEMENT FUNCTIONS
@@ -173,7 +171,7 @@ set_task(){
 	
 	local min_name="${1}_${2}_min_lvl"
 	local min_lvl="${!min_name}"
-	get_lvl "${1}ing"
+	local level="$(get_lvl "${1}ing")"
 	
 	local array_name="$1_locations"
 	local location_array="$array_name[@]"
@@ -191,11 +189,11 @@ set_task(){
 	check_task
 	echo ""
 	
-	get_value_from_file "last task" "${ACCOUNT}/general.txt"
-	set_value_in_file "last task" "${file_value}" "$1" "${ACCOUNT}/general.txt"
+	local task_name="$(get_value_from_file "last task" "${ACCOUNT}/general.txt")"
+	set_value_in_file "last task" "${task_name}" "$1" "${ACCOUNT}/general.txt"
 	
-	get_value_from_file "location task" "${ACCOUNT}/general.txt"
-	set_value_in_file "location task" "${file_value}" "$2" "${ACCOUNT}/general.txt"
+	local task_location="$(get_value_from_file "location task" "${ACCOUNT}/general.txt")"
+	set_value_in_file "location task" "${task_location}" "$2" "${ACCOUNT}/general.txt"
 	
 	echo "Started ${1}ing at the $2"
 }
@@ -203,23 +201,20 @@ set_task(){
 # Run the simulate task function with the safety of checking if a task is currently running or not
 # this function is for notifying the user what happened
 check_task(){
-	get_value_from_file "last task" "${ACCOUNT}/general.txt"
-	if [ -z "$file_value" ]; then
+	local task_name="$(get_value_from_file "last task" "${ACCOUNT}/general.txt")"
+	if [ -z "$task_name" ]; then
 		return
 	fi
-	local task_name="$file_value"
 
-	get_value_from_file "location task" "${ACCOUNT}/general.txt"
-	if [ -z "$file_value" ]; then
+	local task_location="$(get_value_from_file "location task" "${ACCOUNT}/general.txt")"
+	if [ -z "$task_location" ]; then
 		return
 	fi
-	local task_location="$file_value"
 	
-	get_lvl "${task_name}ing"
-	local current_lvl="$level"
+	local current_lvl="$(get_lvl "${task_name}ing")"
 	simulate_action $task_name $task_location
-	
-	get_lvl "${task_name}ing"
+	local level="$(get_lvl "${task_name}ing")"
+
 	if [ ! $(($current_lvl+0)) -eq $(($level+0)) ]; then
 		echo "${ACCOUNT} ${task_name}ing level went from $current_lvl to $level."
 	fi
@@ -232,13 +227,13 @@ simulate_action(){
 	local task_name="$1"
 	local task_location="$2"
 	
-	get_value_from_file "last time stamp" "${ACCOUNT}/general.txt"
+	local last_time_stamp="$(get_value_from_file "last time stamp" "${ACCOUNT}/general.txt")"
 	local current_time
 	current_time="$(date +%s)"
-	set_value_in_file "last time stamp" "$file_value" "$current_time" "${ACCOUNT}/general.txt"
-	local elapsed_seconds=$(($((current_time+0))-$((file_value+0))))
-	elapsed_seconds=$(($elapsed_seconds+5000))
-	get_elapsed_time "${elapsed_seconds}"
+	set_value_in_file "last time stamp" "$last_time_stamp" "$current_time" "${ACCOUNT}/general.txt"
+	local elapsed_seconds=$(($((current_time+0))-$((last_time_stamp+0))))
+	local elapsed_seconds=$((elapsed_seconds+5000))
+	local elapsed_time="$(get_elapsed_time "${elapsed_seconds}")"
 	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time. Now for the spoils:"
 	
 	$task_name $task_location $elapsed_seconds
@@ -263,9 +258,9 @@ simulate_action(){
 		return
 	fi
 	#save the xp
-	get_value_from_file "${task_name}ing" "${ACCOUNT}/levels.txt"
-	local new_total=$(($((file_value+0))+$((exp_gained))))
-	set_value_in_file "${task_name}ing" "$file_value" "$new_total" "${ACCOUNT}/levels.txt"
+	local orig_exp="$(get_value_from_file "${task_name}ing" "${ACCOUNT}/levels.txt")"
+	local new_total=$(($((orig_exp+0))+$((exp_gained))))
+	set_value_in_file "${task_name}ing" "$orig_exp" "$new_total" "${ACCOUNT}/levels.txt"
 	echo "${ACCOUNT} gained $exp_gained ${task_name}ing XP."
 }
 
@@ -274,9 +269,9 @@ show_inventory(){
 	if [ $# -gt 1 ]; then
 		echo "FILTERED INVENTORY (${ACCOUNT}):"
 		for item in "${@:2}"; do
-			get_value_from_file "$item" "${ACCOUNT}/inventory.txt"
-			if [ -n "$file_value" ]; then
-				echo "  $item: $file_value"
+			local item_quantity="$(get_value_from_file "$item" "${ACCOUNT}/inventory.txt")"
+			if [ -n "$item_quantity" ]; then
+				echo "  $item: $item_quantity"
 			fi
 		done
 	else
@@ -322,7 +317,6 @@ fish_deapsea_min_lvl=75
 fish_locations=(lake river sea ocean deapsea)
 fish(){
 	local base_speed
-	get_lvl "fishing"
 	if [ "$1" == "help" ]; then
 		echo "Fishing is a skill for collecting fish (who knew). The following locations are available:"
 		all_location_help "fish"
@@ -388,7 +382,6 @@ woodcut_magicforest_min_lvl=70
 woodcut_locations=(forest darkforest woodyhils magicforest)
 woodcut(){
 	local base_speed
-	get_lvl "woodcuting"
 	if [ "$1" == "help" ]; then
 		echo "Woodcutting is a skill where you chop and collect wood (WAUW). The following locations are available:"
 		all_location_help "woodcut"
@@ -475,9 +468,8 @@ specific_location_help(){
 #	3. base likelyhood to sucesfully perform an action
 # results are stored in exp_gained and simulation_result
 run_action_simulation(){
-	get_value_from_file "$1" "${ACCOUNT}/levels.txt"
-	local starting_exp="$file_value"
-	exp_to_lvl $(($starting_exp+$exp_gained))
+	local starting_exp="$(get_value_from_file "$1" "${ACCOUNT}/levels.txt")"
+	local level="$(exp_to_lvl $(($starting_exp+$exp_gained)))"
 	local base_speed=$(($3+0))
 	local speed=$(($base_speed - $level * 2))
 
@@ -487,7 +479,7 @@ run_action_simulation(){
 	do
 		local catch_roll=$((1 + RANDOM % $speed))
 		if  [ "$catch_roll" -eq 1 ]; then
-			exp_to_lvl $(($starting_exp+$exp_gained))
+			local level="$(exp_to_lvl $(($starting_exp+$exp_gained)))"
 			speed=$(($base_speed - $level * 2))
 			if [ $speed -lt 10 ]; then
 				speed=10
@@ -547,14 +539,15 @@ wheighted_roll(){
 # get a value from a file and save into file_value
 #	1. value name
 #	2. name of file
-file_value=""
 get_value_from_file(){
+	local file_value
 	if ! grep -q "^$1" "${BIN}$2"; then
 		file_value=""
 	else
 		local sed_line="s/^${1} = //"
 		file_value="$(grep "^$1" ${BIN}"$2" | sed "$sed_line")"
 	fi
+	echo "$file_value"
 }
 
 # set a value in a file
@@ -578,12 +571,12 @@ add_value_in_file(){
 #	1. the item name
 #	2. the item quantity (can be negative)
 add_item_in_inventory(){
-	get_value_from_file "$1" "${ACCOUNT}/inventory.txt"
-	if [ -z "$file_value" ]; then
+	local item="$(get_value_from_file "$1" "${ACCOUNT}/inventory.txt")"
+	if [ -z "$item" ]; then
 		local entry="$1 = $2"
 		add_value_in_file "$entry" "${ACCOUNT}/inventory.txt"
 	else
-		set_value_in_file "$1" "$file_value" $(($(("$file_value"+0))+$(("$2"+0)))) "${ACCOUNT}/inventory.txt"
+		set_value_in_file "$1" "$item" $(($(("$item"+0))+$(("$2"+0)))) "${ACCOUNT}/inventory.txt"
 	fi
 }
 
@@ -593,7 +586,6 @@ add_item_in_inventory(){
 # convert seconds into days hours minutes seconds --> https://stackoverflow.com/questions/12199631/convert-seconds-to-hours-minutes-seconds
 #	1. time in seconds
 
-elapsed_time=""
 function get_elapsed_time() {
     num=$1
     min=0
@@ -617,7 +609,7 @@ function get_elapsed_time() {
     else
         ((sec=num))
     fi
-    elapsed_time="${day}d ${hour}h ${min}m ${sec}s"
+    echo "${day}d ${hour}h ${min}m ${sec}s"
 }
 
 determine_action "${@}"
