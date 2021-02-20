@@ -27,7 +27,7 @@ determine_action(){
 	fi
 	
 	# actions 
-	if [ "$1" == "fish" ] || [ "$1" == "woodcut" ]; then
+	if [ "$1" == "fish" ] || [ "$1" == "woodcut" ] || [ "$1" == "mine" ]; then
 		if [ "$2" == "help" ] || [ -z "$2" ]; then
 			$1 "help"
 		elif [ -n "$3" ] && [ "$3" == "help" ]; then
@@ -78,7 +78,7 @@ new_account(){
 	fi
 	if mkdir -p "${BIN}$1" ; then
 		touch "${BIN}$1/inventory.txt"
-		echo -e "fishing = 0\nwoodcuting = 0" >> "${BIN}$1/levels.txt"
+		echo -e "fishing = 0\nwoodcuting = 0\nmineing = 0" >> "${BIN}$1/levels.txt"
 		echo -e "last time stamp = $(date +%s)\nlast task = \nlocation task = " >> "${BIN}$1/general.txt"
 		echo "Succesfully created account $1"
 	else
@@ -107,7 +107,7 @@ account_stats(){
 # show the levels of the player
 #	optional stats to print otherwise all of them are printed
 show_stats(){
-	local all_stats=("fishing" "woodcuting")
+	local all_stats=("fishing" "woodcuting", "mineing")
 	if [ $# -gt 1 ]; then
 		echo "FILTERED LEVELS (${ACCOUNT}):"
 		for stat in "${@:2}"; do
@@ -232,7 +232,7 @@ simulate_action(){
 	current_time="$(date +%s)"
 	set_value_in_file "last time stamp" "$last_time_stamp" "$current_time" "${ACCOUNT}/general.txt"
 	local elapsed_seconds=$(($((current_time+0))-$((last_time_stamp+0))))
-	local elapsed_seconds=$((elapsed_seconds+5000))
+	elapsed_seconds=$((elapsed_seconds+5000))
 	local elapsed_time="$(get_elapsed_time "${elapsed_seconds}")"
 	echo "${ACCOUNT} has ${task_name}ed for $elapsed_time. Now for the spoils:"
 	
@@ -364,6 +364,7 @@ fish(){
 		run_action_simulation "fishing" "$2" "$base_speed"
 	fi
 }
+
 # Simulate a woodcut attempt
 #	1. the area to woodcut in
 #	2. number of seconds to simulate 
@@ -424,6 +425,75 @@ woodcut(){
 	fi
 }
 
+# Simulate a woodcut attempt
+#	1. the area to woodcut in
+#	2. number of seconds to simulate 
+mine_rockyplains_array=(copper pebble iron "clump of dirt" "simple geode" "jade" limestone)
+mine_rockyplains_min_lvl=0
+
+mine_hills_array=(coal rock "greater geode" marble bluerian emerald "rock moss" "dense coal")
+mine_hilss_min_lvl=15
+
+mine_quarry_array=("pine log" "aspen log" "petrified wood" "large branch" "evergreen log" "resin" "rockwood log")
+mine_quarry_min_lvl=40
+
+mine_mountains_array=("blue log" "red log" "magic log" "ever floating leave" "magic bark" "glow log")
+mine_mountains_min_lvl=70
+
+mine_caves_array=("blue log" "red log" "magic log" "ever floating leave" "magic bark" "glow log")
+mine_caves_min_lvl=70
+
+mine_locations=(rockyplains hills quarry mountains caves )
+mine(){
+	local base_speed
+	if [ "$1" == "help" ]; then
+		echo "Mining is a skill where you get them rocks. The following locations are available:"
+		all_location_help "mine"
+		return
+	elif [ "$1" == "rockyplains" ]; then
+		lvl_array=(0 0 5 5 10 15 20)
+		xp_array=(5 1 7 2 15 30 15)
+		wheigth_array=(20 40 50 60 65 66 75)
+		simulation_result=(0 0 0 0 0 0 0)
+		base_speed=200
+	elif [ "$1" == "hills" ]; then
+		lvl_array=(15 15 20 25 30 35 35 40)
+		xp_array=(18 5 25 25 35 50 40 50)
+		wheigth_array=(10 30 35 45 50 51 55 60)
+		simulation_result=(0 0 0 0 0 0 0 0)
+		base_speed=350
+	elif [ "$1" == "quarry" ]; then
+		lvl_array=(40 50 60 60 65 75 80)
+		xp_array=(35 50 200 25 70 100 120)
+		wheigth_array=(10 20 21 31 51 55 60)
+		simulation_result=(0 0 0 0 0 0 0)
+		base_speed=400
+	elif [ "$1" == "mountains" ]; then
+		lvl_array=(70 70 80 85 90 99)
+		xp_array=(100 100 120 180 250 400)
+		wheigth_array=(20 40 50 51 60 70)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=420
+	elif [ "$1" == "caves" ]; then
+		lvl_array=(70 70 80 85 90 99)
+		xp_array=(100 100 120 180 250 400)
+		wheigth_array=(20 40 50 51 60 70)
+		simulation_result=(0 0 0 0 0 0)
+		base_speed=420
+	else
+		echo "There is no location $1 to mine at."
+		all_location_help "mine"
+		return
+	fi
+	
+	if [ "$2" == "help" ]; then
+		specific_location_help "mine" "$1"
+	else
+		# reduce speed based on lvl
+		run_action_simulation "mineing" "$2" "$base_speed"
+	fi
+}
+
 # print a help message for all locations of an action
 #	1. the action
 all_location_help(){
@@ -480,7 +550,7 @@ run_action_simulation(){
 		local catch_roll=$((1 + RANDOM % $speed))
 		if  [ "$catch_roll" -eq 1 ]; then
 			local level="$(exp_to_lvl $(($starting_exp+$exp_gained)))"
-			speed=$(($base_speed - $level * 2))
+			speed=$(($base_speed - $level))
 			if [ $speed -lt 10 ]; then
 				speed=10
 			fi
@@ -545,7 +615,7 @@ get_value_from_file(){
 		file_value=""
 	else
 		local sed_line="s/^${1} = //"
-		file_value="$(grep "^$1" ${BIN}"$2" | sed "$sed_line")"
+		file_value="$(grep "^$1 = " ${BIN}"$2" | sed "$sed_line")"
 	fi
 	echo "$file_value"
 }
